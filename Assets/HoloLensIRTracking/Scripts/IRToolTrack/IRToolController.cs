@@ -26,7 +26,11 @@ namespace IRToolTrack
         private Vector3 targetPosition = Vector3.zero;
         private Quaternion targetRotation = Quaternion.identity;
         private bool[] childAtIndexActive;
+        private float trackingStableDuration = 0.5f; // 需要连续多少秒才算稳定变化
+        private float trackingStateLastChangeTime = 0f;
+        private bool _stableTrackingState = false; // 过滤后的稳定状态
 
+        public bool StableTracking => _stableTrackingState;
         // 🔹 当前是否正在被追踪（识别出位姿）
         public bool isTracking { get; private set; } = false;
 
@@ -113,6 +117,24 @@ namespace IRToolTrack
                                  tool_transform[7] != 0 &&
                                  lastUpdate < trackingTimestamp;
 
+            // 原始 tracking 状态赋值
+            isTracking = validTracking;
+
+            // 稳定 tracking 状态滤波逻辑
+            if (isTracking != _stableTrackingState)
+            {
+                if (Time.time - trackingStateLastChangeTime >= trackingStableDuration)
+                {
+                    _stableTrackingState = isTracking;
+                    trackingStateLastChangeTime = Time.time;
+                }
+            }
+            else
+            {
+                trackingStateLastChangeTime = Time.time;
+            }
+
+            // 若 tracking 有效，更新目标位姿 + 激活可见子物体
             if (validTracking)
             {
                 if (!childrenActive)
@@ -131,12 +153,9 @@ namespace IRToolTrack
                 targetRotation = new Quaternion(tool_transform[3], tool_transform[4], tool_transform[5], tool_transform[6]);
                 targetPosition = new Vector3(tool_transform[0], tool_transform[1], tool_transform[2]);
                 lastSpotted = Time.time;
-                isTracking = true;
             }
             else
             {
-                isTracking = false;
-
                 if (childrenActive && disableWhenTrackingLost && Time.time - lastSpotted > secondsLostUntilDisable)
                 {
                     for (int i = 0; i < transform.childCount; i++)
